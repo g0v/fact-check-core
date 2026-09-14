@@ -30,9 +30,15 @@ async function assertPublicDns(url: URL, fetcher: Fetcher, signal: AbortSignal) 
     if (data.Status !== 0) throw new Error("DNS 解析失敗");
     return Array.isArray(data.Answer) ? data.Answer : [];
   }));
-  const addresses = answers.flat()
-    .map((answer) => asRecord(answer).data)
-    .filter((address): address is string => typeof address === "string");
+  // DoH 的 Answer 可能同時包含 CNAME 與最終 A／AAAA 紀錄；只有位址紀錄
+  // 才應送入 IP 安全檢查，否則合法 CNAME 網域會被誤判成非公開 IP。
+  const addresses = answers.flat().flatMap((answer): string[] => {
+    if (!answer || typeof answer !== "object" || Array.isArray(answer)) return [];
+    const record = asRecord(answer);
+    return (record.type === 1 || record.type === 28) && typeof record.data === "string"
+      ? [record.data]
+      : [];
+  });
   if (!addresses.length || addresses.some((address) => !isPublicIp(address))) throw new Error("非公開位址");
 }
 
