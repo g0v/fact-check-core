@@ -3,20 +3,22 @@ import type { Env, Moderation } from "../contracts";
 import { upstreamUnavailable } from "../errors";
 import type { Fetcher } from "../http";
 import { withTimeout } from "../http";
-import { asRecord } from "../input";
 import { moderationPrompt } from "../prompts/moderation";
 import { parseJsonCompletion, stringArray } from "./model-output";
+import { v } from "../validation";
+
+const moderationSchema = v.object({
+  decision: v.picklist(["allow", "review", "block"]),
+  categories: v.unknown(),
+  reason: v.optional(v.pipe(v.string(), v.trim(), v.transform((value) => value.slice(0, 2_000)))),
+});
 
 function parseModeration(value: unknown): Moderation {
-  const result = asRecord(value);
-  const decision = result.decision;
-  if (decision !== "allow" && decision !== "review" && decision !== "block") {
-    throw new Error("分類不正確");
-  }
+  const result = v.parse(moderationSchema, value);
   const categories = stringArray(result.categories, 10, 100);
-  const reason = typeof result.reason === "string" ? result.reason.trim().slice(0, 2_000) : undefined;
+  const reason = result.reason;
   return {
-    decision: decision === "allow" && categories.length ? "block" : decision,
+    decision: result.decision === "allow" && categories.length ? "block" : result.decision,
     categories,
     ...(reason ? { reason } : {}),
   };

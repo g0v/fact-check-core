@@ -2,10 +2,10 @@ import { LIMITS, MODELS } from "../config";
 import type { Env, FactCheckInput, Moderation, Verdict } from "../contracts";
 import { upstreamUnavailable } from "../errors";
 import { withTimeout } from "../http";
-import { text } from "../input";
 import { synthesisPrompt } from "../prompts/synthesis";
 import { parseJsonCompletion } from "./model-output";
 import type { Evidence } from "./types";
+import { textSchema, v } from "../validation";
 
 const verdicts: Verdict[] = [
   "supported",
@@ -15,6 +15,13 @@ const verdicts: Verdict[] = [
   "refuted",
   "insufficient_evidence",
 ];
+
+const synthesisSchema = v.object({
+  factuality: v.pipe(v.number(), v.finite(), v.minValue(0), v.maxValue(1)),
+  confidence: v.pipe(v.number(), v.finite(), v.minValue(0), v.maxValue(1)),
+  verdict: v.picklist(verdicts),
+  feedback: textSchema(6_000),
+});
 
 function hasUsableEvidence(evidence: Evidence[]) {
   return evidence.some((item) => item.source !== "provided-url" || item.reliability === "allowlisted-institution");
@@ -54,23 +61,12 @@ export async function synthesize(
         }),
       LIMITS.modelTimeoutMs,
     );
-    const value = parseJsonCompletion(output);
-    if (
-      typeof value.factuality !== "number" ||
-      value.factuality < 0 ||
-      value.factuality > 1 ||
-      typeof value.confidence !== "number" ||
-      value.confidence < 0 ||
-      value.confidence > 1 ||
-      !verdicts.includes(value.verdict as Verdict)
-    ) {
-      throw new Error("綜整格式不正確");
-    }
+    const value = v.parse(synthesisSchema, parseJsonCompletion(output));
     return {
       factuality: value.factuality,
       confidence: hasEvidence ? value.confidence : Math.min(value.confidence, 0.5),
-      verdict: value.verdict as Verdict,
-      feedback: text(value.feedback, 6_000),
+      verdict: value.verdict,
+      feedback: value.feedback,
       hasEvidence,
     };
   } catch {

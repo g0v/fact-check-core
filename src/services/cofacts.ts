@@ -1,11 +1,18 @@
 import { LIMITS } from "../config";
 import { upstreamUnavailable } from "../errors";
 import { fetchJson, type Fetcher } from "../http";
-import { asRecord, safeSourceUrl, text } from "../input";
+import { safeSourceUrl } from "../input";
 import type { Candidate, Evidence } from "./types";
+import { parseRecord, parseText, v } from "../validation";
+
+const graphQlResponseSchema = v.object({
+  data: v.objectWithRest({}, v.unknown()),
+  errors: v.optional(v.array(v.unknown())),
+});
 
 async function queryCofacts(query: string, variables: Record<string, string>, fetcher: Fetcher) {
-  const output = asRecord(
+  const output = v.parse(
+    graphQlResponseSchema,
     await fetchJson(fetcher, "https://api.cofacts.tw/graphql", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -13,20 +20,20 @@ async function queryCofacts(query: string, variables: Record<string, string>, fe
     }),
   );
   if (Array.isArray(output.errors) && output.errors.length) throw new Error("Cofacts 查詢失敗");
-  return asRecord(output.data);
+  return output.data;
 }
 
 export async function searchCofactsCandidates(claim: string, fetcher: Fetcher): Promise<Candidate[]> {
   const query = `query Search($text: String!) { ListArticles(filter: { moreLikeThis: { like: $text, minimumShouldMatch: "30%" } }, orderBy: [{ _score: DESC }], first: ${LIMITS.candidates}) { edges { score node { id text } } } }`;
   try {
-    const root = asRecord((await queryCofacts(query, { text: claim }, fetcher)).ListArticles);
+    const root = parseRecord((await queryCofacts(query, { text: claim }, fetcher)).ListArticles);
     const seen = new Set<string>();
     return (Array.isArray(root.edges) ? root.edges : [])
       .slice(0, LIMITS.candidates)
       .flatMap((raw): Candidate[] => {
-        const edge = asRecord(raw);
-        const node = asRecord(edge.node);
-        const articleId = text(node.id, 200);
+        const edge = parseRecord(raw);
+        const node = parseRecord(edge.node);
+        const articleId = parseText(node.id, 200);
         const candidateText = typeof node.text === "string" ? node.text.trim() : "";
         if (!candidateText) return [];
         if (seen.has(articleId)) throw new Error("重複文章 ID");
@@ -47,7 +54,7 @@ const replyVerdicts: Record<string, string> = {
 
 async function getArticleEvidence(candidate: Candidate, fetcher: Fetcher): Promise<Evidence[]> {
   const query = `query GetEvidence($id: String!) { GetArticle(id: $id) { id text articleReplies(statuses: [NORMAL]) { positiveFeedbackCount negativeFeedbackCount reply { text type reference hyperlinks { url normalizedUrl } } } aiReplies { status text } } }`;
-  const article = asRecord((await queryCofacts(query, { id: candidate.articleId }, fetcher)).GetArticle);
+  const article = parseRecord((await queryCofacts(query, { id: candidate.articleId }, fetcher)).GetArticle);
   if (article.id !== candidate.articleId) throw new Error("文章 ID 不符");
   const common = {
     articleId: candidate.articleId,
@@ -59,13 +66,13 @@ async function getArticleEvidence(candidate: Candidate, fetcher: Fetcher): Promi
   const evidence: Evidence[] = [];
   for (const raw of (Array.isArray(article.articleReplies) ? article.articleReplies : []).slice(0, LIMITS.repliesPerArticle)) {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
-    const link = asRecord(raw);
+    const link = parseRecord(raw);
     if (!link.reply || typeof link.reply !== "object" || Array.isArray(link.reply)) continue;
-    const reply = asRecord(link.reply);
+    const reply = parseRecord(link.reply);
     const replyText = typeof reply.text === "string" ? reply.text.trim() : "";
     if (!replyText || !(String(reply.type) in replyVerdicts)) continue;
     const urls = (Array.isArray(reply.hyperlinks) ? reply.hyperlinks : []).flatMap((link): string[] => {
-      const value = asRecord(link);
+      const value = parseRecord(link);
       const url = safeSourceUrl(value.normalizedUrl) ?? safeSourceUrl(value.url);
       return url ? [url] : [];
     });
@@ -83,7 +90,7 @@ async function getArticleEvidence(candidate: Candidate, fetcher: Fetcher): Promi
   }
   for (const raw of (Array.isArray(article.aiReplies) ? article.aiReplies : []).slice(0, LIMITS.repliesPerArticle)) {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
-    const reply = asRecord(raw);
+    const reply = parseRecord(raw);
     if (reply.status === "SUCCESS" && typeof reply.text === "string" && reply.text.trim()) {
       evidence.push({ ...common, source: "cofacts-ai", reliability: "ai-generated", text: reply.text.trim().slice(0, LIMITS.evidenceText) });
     }

@@ -1,7 +1,8 @@
 import { LIMITS } from "./config";
 import { upstreamUnavailable } from "./errors";
 import { readText, withTimeout, type Fetcher } from "./http";
-import { asRecord, isPublicIp, validatePublicUrl } from "./input";
+import { isPublicIp, validatePublicUrl } from "./input";
+import { parseRecord } from "./validation";
 
 export type UrlContext = {
   source: "provided-url";
@@ -41,7 +42,7 @@ async function assertPublicDns(url: URL, fetcher: Fetcher, signal: AbortSignal) 
     endpoint.searchParams.set("type", type);
     const response = await fetcher(endpoint, { headers: { Accept: "application/dns-json" }, signal, redirect: "manual" });
     if (!response.ok) throw new Error("DNS 查詢失敗");
-    const data = asRecord(JSON.parse(await readText(response.body, 32_000, signal)));
+    const data = parseRecord(JSON.parse(await readText(response.body, 32_000, signal)));
     if (data.Status !== 0) throw new Error("DNS 解析失敗");
     return Array.isArray(data.Answer) ? data.Answer : [];
   }));
@@ -49,7 +50,7 @@ async function assertPublicDns(url: URL, fetcher: Fetcher, signal: AbortSignal) 
   // 才應送入 IP 安全檢查，否則合法 CNAME 網域會被誤判成非公開 IP。
   const addresses = answers.flat().flatMap((answer): string[] => {
     if (!answer || typeof answer !== "object" || Array.isArray(answer)) return [];
-    const record = asRecord(answer);
+    const record = parseRecord(answer);
     return (record.type === 1 || record.type === 28) && typeof record.data === "string"
       ? [record.data]
       : [];

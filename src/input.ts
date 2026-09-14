@@ -2,26 +2,15 @@ import ipaddr from "ipaddr.js";
 import { LIMITS } from "./config";
 import type { FactCheckInput } from "./contracts";
 import { invalidInput } from "./errors";
-
-export function asRecord(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("必須為物件");
-  return value as Record<string, unknown>;
-}
-
-export function text(value: unknown, max: number): string {
-  if (typeof value !== "string") throw new Error("必須為文字");
-  const trimmed = value.trim();
-  if (!trimmed || trimmed.length > max) throw new Error("文字不正確");
-  return trimmed;
-}
+import { parseRecord, parseText } from "./validation";
 
 export function parseInput(value: unknown): FactCheckInput {
   try {
-    const input = asRecord(value);
-    const claim = text(input.text, 100_000);
+    const input = parseRecord(value);
+    const claim = parseText(input.text, 100_000);
     if ([...claim].length > LIMITS.text) throw new Error("文字過長");
     if (input.url === undefined) return { text: claim };
-    return { text: claim, url: validatePublicUrl(text(input.url, LIMITS.url)).href };
+    return { text: claim, url: validatePublicUrl(parseText(input.url, LIMITS.url)).href };
   } catch {
     throw invalidInput();
   }

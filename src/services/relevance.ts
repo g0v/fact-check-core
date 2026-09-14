@@ -1,10 +1,18 @@
 import { LIMITS, MODELS } from "../config";
 import type { Env } from "../contracts";
 import { withTimeout } from "../http";
-import { asRecord, text } from "../input";
 import { relevancePrompt } from "../prompts/relevance";
 import { parseJsonCompletion } from "./model-output";
 import type { Candidate } from "./types";
+import { textSchema, v } from "../validation";
+
+const relevanceSchema = v.object({
+  results: v.array(v.object({
+    article_id: textSchema(200),
+    relevant: v.boolean(),
+    relevance: v.pipe(v.number(), v.finite(), v.minValue(0), v.maxValue(1)),
+  })),
+});
 
 export async function selectRelevant(claim: string, candidates: Candidate[], env: Env): Promise<Candidate[]> {
   if (!candidates.length) return [];
@@ -27,26 +35,15 @@ export async function selectRelevant(claim: string, candidates: Candidate[], env
       }),
     LIMITS.modelTimeoutMs,
   );
-  const results = asRecord(parseJsonCompletion(output)).results;
-  if (!Array.isArray(results) || results.length !== candidates.length) {
+  const { results } = v.parse(relevanceSchema, parseJsonCompletion(output));
+  if (results.length !== candidates.length) {
     throw new Error("初篩結果不完整");
   }
   const byId = new Map(candidates.map((candidate) => [candidate.articleId, candidate]));
   const seen = new Set<string>();
-  const selected = results.flatMap((raw): Candidate[] => {
-    const result = asRecord(raw);
-    const id = text(result.article_id, 200);
-    if (
-      seen.has(id) ||
-      !byId.has(id) ||
-      typeof result.relevant !== "boolean" ||
-      typeof result.relevance !== "number" ||
-      !Number.isFinite(result.relevance) ||
-      result.relevance < 0 ||
-      result.relevance > 1
-    ) {
-      throw new Error("初篩格式不正確");
-    }
+  const selected = results.flatMap((result): Candidate[] => {
+    const id = result.article_id;
+    if (seen.has(id) || !byId.has(id)) throw new Error("初篩格式不正確");
     seen.add(id);
     return result.relevant && result.relevance >= 0.65
       ? [{ ...byId.get(id)!, relevanceScore: result.relevance }]
