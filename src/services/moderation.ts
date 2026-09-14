@@ -1,6 +1,6 @@
 import { LIMITS, MODELS } from "../config";
 import type { Env, Moderation } from "../contracts";
-import { upstreamUnavailable } from "../errors";
+import { upstreamUnavailable, missingAPIKEY } from "../errors";
 import type { Fetcher } from "../http";
 import { withTimeout } from "../http";
 import { moderationPrompt } from "../prompts/moderation";
@@ -25,7 +25,7 @@ function parseModeration(value: unknown): Moderation {
 }
 
 export async function moderate(text: string, env: Env, fetcher: Fetcher): Promise<Moderation> {
-  if (!env.OPENROUTER_API_KEY?.trim()) throw upstreamUnavailable("moderation");
+  if (!env.OPENROUTER_API_KEY?.trim()) throw missingAPIKEY("moderation");
   try {
     const output = await withTimeout(async (signal) => {
       const response = await fetcher("https://openrouter.ai/api/v1/chat/completions", {

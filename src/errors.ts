@@ -34,6 +34,10 @@ export class ApiError extends Error {
     return new ApiError("UPSTREAM_UNAVAILABLE", "查核上游服務暫時無法使用，請稍後再試。", stage, { cause });
   }
 
+  static missingAPIKey(stage: ApiErrorStage, cause?: unknown) {
+    return new ApiError("INVALID_INPUT", "缺少 OPENROUTER_API_KEY。", stage, { cause });
+  }
+
   static internalError(cause?: unknown) {
     return new ApiError("INTERNAL_ERROR", "查核服務發生錯誤。", undefined, { cause });
   }
@@ -42,4 +46,5 @@ export class ApiError extends Error {
 export const invalidInput = (message?: string) => ApiError.invalidInput(message);
 export const payloadTooLarge = () => ApiError.payloadTooLarge();
 export const upstreamUnavailable = (stage: ApiErrorStage, cause?: unknown) => ApiError.upstreamUnavailable(stage, cause);
+export const missingAPIKEY = (stage: ApiErrorStage, cause?: unknown) => ApiError.missingAPIKey(stage, cause);
 export const internalError = (cause?: unknown) => ApiError.internalError(cause);
