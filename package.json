@@ -4,10 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit",
     "cf-typegen": "wrangler types"
   },
   "devDependencies": {
+    "tsx": "^4.21.0",
     "typescript": "^5.6.0",
     "wrangler": "^4.83.0"
   }

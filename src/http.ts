@@ -2,16 +2,31 @@ import { LIMITS } from "./config";
 
 export type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
+export class TimeoutError extends Error {
+  constructor() {
+    super("上游服務回應逾時。");
+    this.name = "TimeoutError";
+  }
+}
+
 export async function withTimeout<T>(
   action: (signal: AbortSignal) => Promise<T>,
   timeoutMs: number,
 ): Promise<T> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new TimeoutError());
+    }, timeoutMs);
+  });
   try {
-    return await action(controller.signal);
+    // AI.run 目前不接受 AbortSignal；Promise.race 仍需立即結束對呼叫端的等待，
+    // 同時 abort 可取消支援 signal 的 fetch 與 response body 讀取。
+    return await Promise.race([Promise.resolve().then(() => action(controller.signal)), timeout]);
   } finally {
-    clearTimeout(timer);
+    if (timer !== undefined) clearTimeout(timer);
   }
 }
 
@@ -22,6 +37,10 @@ export async function readText(
 ): Promise<string> {
   if (!body) return "";
   const reader = body.getReader();
+  const cancel = () => {
+    void reader.cancel().catch(() => undefined);
+  };
+  signal?.addEventListener("abort", cancel, { once: true });
   const decoder = new TextDecoder();
   let bytes = 0;
   let text = "";
@@ -29,12 +48,16 @@ export async function readText(
     while (true) {
       if (signal?.aborted) throw new Error("逾時");
       const { done, value } = await reader.read();
-      if (done) return text + decoder.decode();
+      if (done) {
+        if (signal?.aborted) throw new TimeoutError();
+        return text + decoder.decode();
+      }
       bytes += value.byteLength;
       if (bytes > maxBytes) throw new Error("回應過大");
       text += decoder.decode(value, { stream: true });
     }
   } finally {
+    signal?.removeEventListener("abort", cancel);
     await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
