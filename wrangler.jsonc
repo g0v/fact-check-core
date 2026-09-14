@@ -1,0 +1,9 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "fact-check-core",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-14",
+  "workers_dev": false,
+  "ai": { "binding": "AI" },
+  "observability": { "enabled": true }
+}
