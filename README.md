@@ -60,6 +60,22 @@ npm run dev:remote
 
 `dev:remote` 會執行 `wrangler dev --remote`。啟動後依終端機顯示的網址測試 Worker；需要本機密碼時，請在專案根目錄建立 `.dev.vars`，填入 `OPENROUTER_API_KEY`，且不要將該檔案提交至版本庫。
 
+伺服器啟動後，可另開一個終端機，直接執行以下指令確認服務正常：
+
+```bash
+# 健康檢查
+curl --fail-with-body http://localhost:8787/health
+
+# 執行事實查核
+curl --fail-with-body \
+  --request POST \
+  --header 'Content-Type: application/json' \
+  --data '{"text":"台灣的首都是台北市。","url":"https://www.taiwan.gov.tw/about.php"}' \
+  http://localhost:8787/fact-check
+```
+
+若 `wrangler` 顯示的本機網址或連接埠不是 `http://localhost:8787`，請將上述網址換成終端機顯示的值。`url` 為選填欄位；只測試文字主張時，可將 request body 改為 `{"text":"台灣的首都是台北市。"}`。
+
 確認變更可用後部署：
 
 ```bash
