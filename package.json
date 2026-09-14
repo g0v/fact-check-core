@@ -6,7 +6,9 @@
   "scripts": {
     "test": "tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "cf-typegen": "wrangler types"
+    "cf-typegen": "wrangler types",
+    "dev:remote": "wrangler dev --remote",
+    "deploy": "wrangler deploy"
   },
   "devDependencies": {
     "@types/node": "^26.5.1",
