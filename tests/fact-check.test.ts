@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { factCheck } from "../src/fact-check";
+import { getCofactsEvidence } from "../src/services/cofacts";
 import { claim, createHarness } from "./helpers";
 
 test("完整 Cofacts 與模型回應產生 completed 結果", async () => {
@@ -35,4 +36,28 @@ test("綜整模型違反輸出契約時回傳 synthesis 上游錯誤", async () 
     factCheck({ text: claim }, env, fetcher),
     (error: unknown) => error instanceof Error && "stage" in error && error.stage === "synthesis",
   );
+});
+
+test("Cofacts 詳情請求的併發數受限於五筆", async () => {
+  let activeRequests = 0;
+  let peakRequests = 0;
+  const candidates = Array.from({ length: 15 }, (_, index) => ({
+    articleId: `article-${index}`,
+    text: `候選文章 ${index}`,
+    searchScore: null,
+  }));
+
+  const result = await getCofactsEvidence(candidates, async (_input, init) => {
+    activeRequests += 1;
+    peakRequests = Math.max(peakRequests, activeRequests);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    activeRequests -= 1;
+    const { id } = JSON.parse(String(init?.body)).variables as { id: string };
+    return Response.json({
+      data: { GetArticle: { id, text: "", articleReplies: [], aiReplies: [] } },
+    });
+  });
+
+  assert.equal(peakRequests, 5);
+  assert.deepEqual(result.failedArticleIds, []);
 });

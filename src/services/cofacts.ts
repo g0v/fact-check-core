@@ -1,3 +1,4 @@
+import pLimit from "p-limit";
 import { LIMITS } from "../config";
 import { upstreamUnavailable } from "../errors";
 import { fetchJson, type Fetcher } from "../http";
@@ -99,7 +100,10 @@ async function getArticleEvidence(candidate: Candidate, fetcher: Fetcher): Promi
 }
 
 export async function getCofactsEvidence(candidates: Candidate[], fetcher: Fetcher) {
-  const results = await Promise.allSettled(candidates.map((candidate) => getArticleEvidence(candidate, fetcher)));
+  const limit = pLimit(LIMITS.cofactsEvidenceConcurrency);
+  const results = await Promise.allSettled(
+    candidates.map((candidate) => limit(getArticleEvidence, candidate, fetcher)),
+  );
   const evidence: Evidence[] = [];
   const failedArticleIds: string[] = [];
   results.forEach((result, index) => {

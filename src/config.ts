@@ -16,6 +16,7 @@ export const LIMITS = {
   relevant: 5,
   evidenceText: 6_000,
   repliesPerArticle: 10,
+  cofactsEvidenceConcurrency: 5,
   redirects: 3,
   fetchTimeoutMs: 10_000,
   modelTimeoutMs: 60_000,
