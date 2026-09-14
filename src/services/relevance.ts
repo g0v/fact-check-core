@@ -30,7 +30,7 @@ export async function selectRelevant(claim: string, candidates: Candidate[], env
         ],
         stream: false,
         temperature: 0,
-        max_tokens: 16_384,
+        max_tokens: LIMITS.relevanceMaxTokens,
         response_format: { type: "json_object" },
       }),
     LIMITS.modelTimeoutMs,
@@ -45,7 +45,7 @@ export async function selectRelevant(claim: string, candidates: Candidate[], env
     const id = result.article_id;
     if (seen.has(id) || !byId.has(id)) throw new Error("初篩格式不正確");
     seen.add(id);
-    return result.relevant && result.relevance >= 0.65
+    return result.relevant && result.relevance >= LIMITS.relevanceThreshold
       ? [{ ...byId.get(id)!, relevanceScore: result.relevance }]
       : [];
   });

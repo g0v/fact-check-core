@@ -1,16 +1,17 @@
 import type { Env } from "./contracts";
+import { cachedFactCheck } from "./cache";
 import { ApiError, internalError, invalidInput, payloadTooLarge } from "./errors";
-import { factCheck } from "./fact-check";
 import { BodyTooLargeError, readText, withTimeout } from "./http";
 import { parseInput } from "./input";
 import { LIMITS } from "./config";
 
-function json(value: unknown, status = 200, requestId?: string) {
+function json(value: unknown, status = 200, requestId?: string, cacheStatus?: string) {
   return Response.json(value, {
     status,
     headers: {
       "Cache-Control": "no-store",
       ...(requestId ? { "X-Request-Id": requestId } : {}),
+      ...(cacheStatus ? { "X-Fact-Check-Cache": cacheStatus.toUpperCase() } : {}),
     },
   });
 }
@@ -36,14 +37,22 @@ async function requestInput(request: Request) {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(
+    request: Request,
+    env: Env,
+    context?: { waitUntil(task: Promise<unknown>): void },
+  ): Promise<Response> {
     const requestId = crypto.randomUUID();
     const path = new URL(request.url).pathname;
     if (path === "/health" && request.method === "GET") return json({ status: "ok" }, 200, requestId);
     try {
       if (path !== "/fact-check") throw invalidInput("找不到內部服務端點。");
-      const result = await factCheck(await requestInput(request), env);
-      return json(result, 200, result.meta.request_id);
+      const result = await cachedFactCheck(await requestInput(request), env, {
+        origin: new URL(request.url).origin,
+        requestId,
+        waitUntil: context ? (task) => context.waitUntil(task) : undefined,
+      });
+      return json(result, 200, result.meta.request_id, result.meta.cache?.status);
     } catch (error) {
       const apiError = error instanceof ApiError ? error : internalError(error);
       const body = {
@@ -69,4 +78,5 @@ export default {
 };
 
 export { factCheck } from "./fact-check";
+export { cachedFactCheck, createResultCacheKey } from "./cache";
 export type { Env, FactCheckInput, FactCheckResult } from "./contracts";
