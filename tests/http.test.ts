@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TimeoutError, withTimeout } from "../src/http.ts";
+import { TimeoutError, withTimeout } from "../src/http";
 
 test("withTimeout 在 action 未結束時立即 reject 並 abort signal", async () => {
   let aborted = false;

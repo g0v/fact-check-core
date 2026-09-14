@@ -23,9 +23,13 @@ vp run cf-typegen       # wrangler types，產生 worker-configuration.d.ts（�
 node --import tsx --test tests/cache.test.ts
 ```
 
-注意：`vp test`、`vp check`、`vp lint` 是 Vite+ 的內建指令，本專案**沒有**採用（跑 `vp run typecheck` 會看到 `This project does not use vite-plus` 的提示，屬正常）。測試一律走 `vp run test`，也就是 package.json 裡的 `node --import tsx --test`，不是 vitest。
+### 兩個會誤導人的提示
+
+1. **不要用 `vp test`。** `vp test` 是 Vite+ 內建的 Vitest，本專案的測試用 Node 內建 test runner（`node:test`），Vitest 認不得，會對七個檔案都報 `No test suite found in file …` 並 exit 1 —— 即使測試其實全過。vp 自己的提示也會叫你改用 npm script。測試一律走 **`vp run test`**（等價寫法 `vpr test`）。`vp check` / `vp lint` 同理，本專案未採用。
+2. **`This project does not use vite-plus` 警告可以忽略。** 本專案只把 vp 當 task runner 用，沒有 Vite+ 設定檔，這行警告是正常的。
 
 **驗收標準：任何修改完成後，必須跑過 `vp run typecheck` 與 `vp run test`，兩者皆綠才算完成。**
+`tsconfig.json` 的 `include` 涵蓋 `src` 與 `tests`，所以 `vp run typecheck` 也會檢查測試檔。
 測試不打真實網路，全部靠 `tests/helpers.ts` 的 `createHarness()` 注入假的 `fetcher` 與 `AI` binding。
 
 CI（`.github/workflows/test.yml`）使用 `npm ci` + `npm test`，因此 `package.json` 的 script 定義必須維持能被 npm 直接執行，不可依賴 vp 專屬語法。
@@ -141,4 +145,4 @@ CORS、IP 限流、每日用量預算、使用者驗證、API key 驗證——**
 - **逾時與大小上限是必要的，不是選配。** 所有外部呼叫走 `withTimeout()`，所有 response body 走 `readText(body, maxBytes, signal)`，不要直接 `await response.text()`。
 - **錯誤分類**：`HttpError`（傳輸層）、`ModelOutputError`（模型輸出）在 service 內部轉成 `ApiError`，由 `src/index.ts` 統一轉成 JSON 回應。
 - `Env` 是手寫在 `src/contracts.ts`，不依賴 `worker-configuration.d.ts`（那個檔案 gitignore，由 `vp run cf-typegen` 產生）。
-- 測試用 Node 內建 test runner + `tsx`，沒有 vitest/jest。新測試放 `tests/*.test.ts`，共用 harness 放 `tests/helpers.ts`。
+- 測試用 Node 內建 test runner + `tsx`，沒有 vitest/jest。新測試放 `tests/*.test.ts`，共用 harness 放 `tests/helpers.ts`。import 一律不帶副檔名（`../src/http`，不是 `../src/http.ts`），否則 `tsc` 會報 TS5097。
