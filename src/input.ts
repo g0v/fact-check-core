@@ -1,3 +1,4 @@
+import ipaddr from "ipaddr.js";
 import { LIMITS } from "./config";
 import type { FactCheckInput } from "./contracts";
 import { invalidInput } from "./errors";
@@ -26,51 +27,14 @@ export function parseInput(value: unknown): FactCheckInput {
   }
 }
 
-function ipv4IsPublic(host: string): boolean {
-  const parts = host.split(".");
-  if (parts.length !== 4 || parts.some((part) => !/^\d+$/.test(part))) return false;
-  const octets = parts.map(Number);
-  if (octets.some((part) => part > 255)) return false;
-  const [a, b] = octets;
-  return !(
-    a === 0 ||
-    a === 10 ||
-    a === 127 ||
-    a >= 224 ||
-    (a === 100 && b >= 64 && b <= 127) ||
-    (a === 169 && b === 254) ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && (b === 0 || b === 168)) ||
-    (a === 198 && (b === 18 || b === 19 || b === 51)) ||
-    (a === 203 && b === 0)
-  );
-}
-
-function ipv6IsPublic(host: string): boolean {
+export function isPublicIp(host: string): boolean {
   try {
-    if (host.includes(".")) return false;
-    const [left, right = ""] = host.toLowerCase().split("::");
-    if (host.split("::").length > 2) return false;
-    const leftParts = left ? left.split(":") : [];
-    const rightParts = right ? right.split(":") : [];
-    if (leftParts.length + rightParts.length > 8 || (!host.includes("::") && leftParts.length !== 8)) return false;
-    const groups = [...leftParts, ...Array(8 - leftParts.length - rightParts.length).fill("0"), ...rightParts];
-    if (groups.some((group) => !/^[0-9a-f]{1,4}$/.test(group))) return false;
-    const value = groups.reduce((total, group) => (total << 16n) + BigInt(`0x${group}`), 0n);
-    const prefix = (bits: number) => value >> BigInt(128 - bits);
-    const is = (base: bigint, bits: number) => prefix(bits) === base >> BigInt(128 - bits);
-    return is(0x20000000000000000000000000000000n, 3) &&
-      !is(0x20010000000000000000000000000000n, 23) &&
-      !is(0x20010db8000000000000000000000000n, 32) &&
-      !is(0x20020000000000000000000000000000n, 16) &&
-      !is(0x3fff0000000000000000000000000000n, 20);
+    // 僅允許可在公網路由的位址；private、reserved、loopback、link-local 等
+    // 所有特殊範圍一律 fail closed。
+    return ipaddr.parse(host).range() === "unicast";
   } catch {
     return false;
   }
-}
-
-export function isPublicIp(host: string): boolean {
-  return host.includes(":") ? ipv6IsPublic(host) : ipv4IsPublic(host);
 }
 
 export function validatePublicUrl(value: string): URL {

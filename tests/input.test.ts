@@ -21,3 +21,16 @@ test("輸入拒絕空白文字、私有位址與含 credential 的網址", () =>
   }
   assert.throws(() => validatePublicUrl("http://192.168.1.1"), ApiError);
 });
+
+test("IP 範圍分類只接受公開 unicast 位址", () => {
+  for (const value of [
+    "http://192.88.99.1", // 已保留的 6to4 relay anycast 範圍
+    "http://[2001:20::1]", // ORCHIDv2 特殊用途 IPv6 範圍
+    "http://[::1]",
+  ]) {
+    assert.throws(() => validatePublicUrl(value), ApiError);
+  }
+
+  assert.equal(validatePublicUrl("https://8.8.8.8").hostname, "8.8.8.8");
+  assert.equal(validatePublicUrl("https://[2606:4700:4700::1111]").hostname, "[2606:4700:4700::1111]");
+});
