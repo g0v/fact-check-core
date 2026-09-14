@@ -1,8 +1,8 @@
 # Fact Check Core
 
-供 `fact-check-api` 透過 Cloudflare Service Binding 呼叫的事實查核核心 Worker。它不提供瀏覽器 API；公開 HTTP、CORS、IP 限流、使用者驗證與用戶端快取應留在呼叫端服務。
+供 `fact-check-api` 透過 Cloudflare Service Binding 呼叫的事實查核核心 Worker。它不提供瀏覽器 API；公開 HTTP、CORS、IP 限流、每日用量預算與使用者驗證應留在呼叫端服務。
 
-核心保留查核所需的安全與領域行為：輸入與網址驗證、URL SSRF 防護、OpenRouter 安全分類、Cofacts 候選／證據、Workers AI 語意初篩與證據綜整。回應沿用既有的事實查核結果契約。
+核心保留查核所需的安全與領域行為：輸入與網址驗證、URL SSRF 防護、OpenRouter 安全分類、Cofacts 候選／證據、Workers AI 語意初篩、證據綜整與查核結果快取。回應沿用既有的事實查核結果契約。
 
 ## Service Binding 契約
 
@@ -13,6 +13,8 @@
 ```
 
 `GET /health` 僅供內部健康檢查。每個回應都有 `X-Request-Id`，且一律 `Cache-Control: no-store`。
+
+成功查核另有 `X-Fact-Check-Cache: HIT|MISS|BYPASS`，且 `meta.cache` 會回報相同狀態。核心使用 Cloudflare Cache API 的 `fact-check-results` named cache，預設保存一小時；只有無警告的 `completed` 結果會寫入。快取鍵涵蓋正規化輸入、模型、提示、限制與契約版本，快取故障時會安全地回到完整查核流程。
 
 在 `fact-check-api` 的 `wrangler.jsonc` 新增 binding：
 

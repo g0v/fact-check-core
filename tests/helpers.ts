@@ -45,8 +45,11 @@ export function createHarness(options: HarnessOptions = {}) {
           : {
               id: "article-1",
               text: "被查核的原始文章。",
+              references: [],
               articleReplies: [
                 {
+                  positiveFeedbackCount: 1,
+                  negativeFeedbackCount: 0,
                   reply: {
                     type: "NOT_RUMOR",
                     text: "人工查核回覆。",

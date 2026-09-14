@@ -14,6 +14,15 @@ export type Moderation = {
   reason?: string;
 };
 
+export const verdicts = [
+  "supported",
+  "mostly_supported",
+  "mixed",
+  "mostly_refuted",
+  "refuted",
+  "insufficient_evidence",
+] as const;
+
 export type Warning = {
   stage: "moderation" | "cofacts-search" | "relevance" | "cofacts-evidence" | "url";
   code: "UPSTREAM_UNAVAILABLE";
@@ -49,6 +58,11 @@ export type FactCheckResult = FactCheckInput & {
     url_context_allowlisted: boolean;
     no_relevant_evidence: boolean;
     warnings: Warning[];
+    cache?: {
+      status: "hit" | "miss" | "bypass";
+      cached_at?: string;
+      expires_at?: string;
+    };
   };
 };
 
@@ -61,6 +75,7 @@ export type AiBinding = {
       temperature: number;
       max_tokens?: number;
       max_completion_tokens?: number;
+      frequency_penalty?: number;
       chat_template_kwargs?: { enable_thinking: boolean };
       response_format: { type: "json_object" };
     },

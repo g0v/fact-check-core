@@ -1,3 +1,11 @@
+export type ApiErrorStage =
+  | "moderation"
+  | "cofacts-search"
+  | "cofacts-evidence"
+  | "relevance"
+  | "synthesis"
+  | "url";
+
 const statusByCode = {
   INVALID_INPUT: 400,
   PAYLOAD_TOO_LARGE: 413,
@@ -6,15 +14,15 @@ const statusByCode = {
 } as const;
 
 export type ApiErrorCode = keyof typeof statusByCode;
-export type ApiErrorStage = "moderation" | "cofacts-search" | "cofacts-evidence" | "relevance" | "synthesis" | "url";
 
 export class ApiError extends Error {
-  public readonly status: (typeof statusByCode)[ApiErrorCode];
+  public readonly status: 400 | 413 | 500 | 502;
 
   private constructor(
     public readonly code: ApiErrorCode,
     message: string,
     public readonly stage?: ApiErrorStage,
+    public readonly configError = false,
     options?: ErrorOptions,
   ) {
     super(message, options);
@@ -30,16 +38,26 @@ export class ApiError extends Error {
     return new ApiError("PAYLOAD_TOO_LARGE", "請求內容過大。");
   }
 
-  static upstreamUnavailable(stage: ApiErrorStage, cause?: unknown) {
-    return new ApiError("UPSTREAM_UNAVAILABLE", "查核上游服務暫時無法使用，請稍後再試。", stage, { cause });
+  static upstreamUnavailable(stage: ApiErrorStage, cause?: unknown, configError = false) {
+    return new ApiError(
+      "UPSTREAM_UNAVAILABLE",
+      "查核上游服務暫時無法使用，請稍後再試。",
+      stage,
+      configError,
+      { cause },
+    );
   }
 
   static internalError(cause?: unknown) {
-    return new ApiError("INTERNAL_ERROR", "查核服務發生錯誤。", undefined, { cause });
+    return new ApiError("INTERNAL_ERROR", "查核服務發生錯誤。", undefined, false, { cause });
   }
 }
 
 export const invalidInput = (message?: string) => ApiError.invalidInput(message);
 export const payloadTooLarge = () => ApiError.payloadTooLarge();
-export const upstreamUnavailable = (stage: ApiErrorStage, cause?: unknown) => ApiError.upstreamUnavailable(stage, cause);
+export const upstreamUnavailable = (
+  stage: ApiErrorStage,
+  cause?: unknown,
+  configError = false,
+) => ApiError.upstreamUnavailable(stage, cause, configError);
 export const internalError = (cause?: unknown) => ApiError.internalError(cause);
