@@ -1,7 +1,7 @@
 import type { Env } from "./contracts";
-import { ApiError } from "./errors";
+import { ApiError, internalError, invalidInput, payloadTooLarge } from "./errors";
 import { factCheck } from "./fact-check";
-import { readText, withTimeout } from "./http";
+import { BodyTooLargeError, readText, withTimeout } from "./http";
 import { parseInput } from "./input";
 import { LIMITS } from "./config";
 
@@ -17,20 +17,21 @@ function json(value: unknown, status = 200, requestId?: string) {
 
 async function requestInput(request: Request) {
   if (request.method !== "POST") {
-    throw new ApiError("INVALID_INPUT", "核心服務只接受 POST /fact-check。", 400);
+    throw invalidInput("核心服務只接受 POST /fact-check。");
   }
   if (request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() !== "application/json") {
-    throw new ApiError("INVALID_INPUT", "請使用 application/json 格式。", 400);
+    throw invalidInput("請使用 application/json 格式。");
   }
   if (Number(request.headers.get("content-length")) > LIMITS.requestBytes) {
-    throw new ApiError("PAYLOAD_TOO_LARGE", "請求內容過大。", 413);
+    throw payloadTooLarge();
   }
   try {
     const raw = await withTimeout((signal) => readText(request.body, LIMITS.requestBytes, signal), LIMITS.fetchTimeoutMs);
     return parseInput(JSON.parse(raw));
   } catch (error) {
     if (error instanceof ApiError) throw error;
-    throw new ApiError("INVALID_INPUT", "JSON 格式不正確、內容過大或無法讀取。", 400);
+    if (error instanceof BodyTooLargeError) throw payloadTooLarge();
+    throw invalidInput("JSON 格式不正確或無法讀取。");
   }
 }
 
@@ -40,21 +41,29 @@ export default {
     const path = new URL(request.url).pathname;
     if (path === "/health" && request.method === "GET") return json({ status: "ok" }, 200, requestId);
     try {
-      if (path !== "/fact-check") throw new ApiError("INVALID_INPUT", "找不到內部服務端點。", 400);
+      if (path !== "/fact-check") throw invalidInput("找不到內部服務端點。");
       const result = await factCheck(await requestInput(request), env);
       return json(result, 200, result.meta.request_id);
     } catch (error) {
-      const known = error instanceof ApiError;
-      const status = known ? error.status : 500;
+      const apiError = error instanceof ApiError ? error : internalError(error);
       const body = {
         status: "error",
-        error: known ? error.code : "INTERNAL_ERROR",
-        message: known ? error.message : "查核服務發生錯誤。",
-        ...(known && error.stage ? { stage: error.stage } : {}),
+        error: apiError.code,
+        message: apiError.message,
+        ...(apiError.stage ? { stage: apiError.stage } : {}),
         request_id: requestId,
       };
-      console.info(JSON.stringify({ event: "error", request_id: requestId, status, stage: known ? error.stage : undefined }));
-      return json(body, status, requestId);
+      console.info(JSON.stringify({
+        event: "error",
+        request_id: requestId,
+        status: apiError.status,
+        code: apiError.code,
+        stage: apiError.stage,
+        ...(apiError.cause === undefined
+          ? {}
+          : { cause_type: apiError.cause instanceof Error ? apiError.cause.name : typeof apiError.cause }),
+      }));
+      return json(body, apiError.status, requestId);
     }
   },
 };

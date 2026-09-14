@@ -41,8 +41,8 @@ export async function searchCofactsCandidates(claim: string, fetcher: Fetcher): 
         seen.add(articleId);
         return [{ articleId, text: candidateText, searchScore: typeof edge.score === "number" && Number.isFinite(edge.score) ? edge.score : null }];
       });
-  } catch {
-    throw upstreamUnavailable("cofacts-search");
+  } catch (error) {
+    throw upstreamUnavailable("cofacts-search", error);
   }
 }
 

@@ -69,7 +69,7 @@ export async function synthesize(
       feedback: value.feedback,
       hasEvidence,
     };
-  } catch {
-    throw upstreamUnavailable("synthesis");
+  } catch (error) {
+    throw upstreamUnavailable("synthesis", error);
   }
 }

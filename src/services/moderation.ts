@@ -48,7 +48,7 @@ export async function moderate(text: string, env: Env, fetcher: Fetcher): Promis
       return response.json();
     }, LIMITS.modelTimeoutMs);
     return parseModeration(parseJsonCompletion(output));
-  } catch {
-    throw upstreamUnavailable("moderation");
+  } catch (error) {
+    throw upstreamUnavailable("moderation", error);
   }
 }

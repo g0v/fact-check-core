@@ -122,7 +122,7 @@ export async function fetchUrlContext(value: string, fetcher: Fetcher = fetch): 
       }
       throw new Error("重新導向過多");
     }, LIMITS.fetchTimeoutMs);
-  } catch {
-    throw upstreamUnavailable("url");
+  } catch (error) {
+    throw upstreamUnavailable("url", error);
   }
 }

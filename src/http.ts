@@ -9,6 +9,13 @@ export class TimeoutError extends Error {
   }
 }
 
+export class BodyTooLargeError extends Error {
+  constructor(public readonly limit: number) {
+    super("回應過大");
+    this.name = "BodyTooLargeError";
+  }
+}
+
 export async function withTimeout<T>(
   action: (signal: AbortSignal) => Promise<T>,
   timeoutMs: number,
@@ -53,7 +60,7 @@ export async function readText(
         return text + decoder.decode();
       }
       bytes += value.byteLength;
-      if (bytes > maxBytes) throw new Error("回應過大");
+      if (bytes > maxBytes) throw new BodyTooLargeError(maxBytes);
       text += decoder.decode(value, { stream: true });
     }
   } finally {
