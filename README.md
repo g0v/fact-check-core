@@ -40,4 +40,30 @@ const response = await env.FACT_CHECK_CORE.fetch(
 
 ## 設定
 
-在 Cloudflare 將 `OPENROUTER_API_KEY` 設為 secret；Workers AI 綁定名稱為 `AI`。本機可從 `.dev.vars.example` 複製建立 `.dev.vars`，但不可提交真實金鑰。
+在 Cloudflare 將 `OPENROUTER_API_KEY` 設為 secret；Workers AI 綁定名稱為 `AI`。本機可從 `.dev.vars.example` 複製建立 `.dev.vars`，但不可在git版本控制中，提交真實金鑰。
+
+## 近端開發流程
+
+請先安裝 Node.js 與 `vp`，並完成 Cloudflare 登入。接著在專案根目錄執行：
+
+```bash
+# 安裝依賴
+vp install
+
+# 執行型別檢查與測試
+vp run typecheck
+vp run test
+
+# 啟動使用 Cloudflare 遠端資源的本機開發伺服器
+vp run dev:remote
+```
+
+`dev:remote` 會執行 `wrangler dev --remote`。啟動後依終端機顯示的網址測試 Worker；需要本機密碼時，請在專案根目錄建立 `.dev.vars`，填入 `OPENROUTER_API_KEY`，且不要將該檔案提交至版本庫。
+
+確認變更可用後部署：
+
+```bash
+vp run deploy
+```
+
+部署前建議再次執行 `vp run typecheck` 與 `vp run test`。部署需要具備對應 Cloudflare 帳號與 Worker 權限，且會更新 `fact-check-core` 的線上版本。
