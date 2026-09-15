@@ -18,6 +18,7 @@ function hasUsableEvidence(evidence: Evidence[]) {
   return evidence.some((item) => item.source !== "provided-url" || item.reliability === "allowlisted-institution");
 }
 
+// 當查不到相關內容，而用常識判斷時，信心調整成最高0.5
 export function parseSynthesis(value: unknown, hasEvidence: boolean) {
   const result = v.parse(synthesisSchema, value);
   return {
