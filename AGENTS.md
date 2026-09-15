@@ -11,14 +11,17 @@
 - 公開 HTTP、CORS、IP 限流、使用者驗證與用戶端快取屬於呼叫端服務，不應加入本專案。
 - `POST /fact-check` 是唯一查核端點；`GET /health` 僅供內部健康檢查。
 - 對外回應一律保持 `Cache-Control: no-store`，並附上 `X-Request-Id`。
+- 成功的 `POST /fact-check` 回應另以 `X-Fact-Check-Cache` 與 `meta.cache` 揭露 Worker 內部快取狀態；這不改變對外禁止瀏覽器快取的規則。
 
 ## 目前架構
 
-查核管線定義在 `src/fact-check.ts`：
+`src/index.ts` 先正規化輸入並交由 `src/cache.ts` 讀取 Worker 內部結果快取；未命中、略過或快取故障時，才執行 `src/fact-check.ts` 的查核管線：
 
 ```text
 parseInput
   ↓
+result-cache ── hit ──→ 回傳已驗證結果
+  ↓ miss / bypass / error
 moderation                 OpenRouter
   ↓ block 時立即停止
 cofacts-search ─┬─ url-context   並行執行
@@ -28,6 +31,8 @@ relevance                  Workers AI
 cofacts-evidence
   ↓
 synthesis                  Workers AI
+  ↓ completed 且無 warning
+result-cache 寫入（失敗不影響回應）
 ```
 
 各階段失敗行為必須維持：
@@ -47,9 +52,10 @@ synthesis                  Workers AI
 
 | 路徑 | 職責 |
 | --- | --- |
-| `src/index.ts` | Worker entry、路由、request body 限制、錯誤回應與公開 exports |
-| `src/config.ts` | 模型名稱與各種大小、逾時、數量上限 |
-| `src/contracts.ts` | `FactCheckInput`、`FactCheckResult`、`Env` 等對外型別契約 |
+| `src/index.ts` | Worker entry、路由、request body 限制、快取整合、錯誤回應與公開 exports |
+| `src/config.ts` | 模型名稱、結果快取設定與各種大小、逾時、數量上限 |
+| `src/contracts.ts` | `FactCheckInput`、含快取 meta 的 `FactCheckResult`、`Env` 等對外型別契約 |
+| `src/cache.ts` | Cache API 快取鍵、快取內容重新驗證、讀寫失敗回退與非阻塞寫入 |
 | `src/fact-check.ts` | 查核管線編排、warning 累積與 meta 組裝 |
 | `src/input.ts` | 輸入正規化、公開 URL 與 IP 驗證 |
 | `src/url-context.ts` | DoH 預檢、安全重導與 URL 文字擷取 |
@@ -58,19 +64,19 @@ synthesis                  Workers AI
 | `src/validation.ts` | Valibot 共用驗證工具 |
 | `src/services/*` | Cofacts、moderation、relevance、synthesis 與模型輸出處理 |
 | `src/prompts/*` | 三個模型階段的 system prompt |
-| `tests/*` | Node test runner 測試與無真實網路的測試 harness |
+| `tests/*` | Node test runner 測試、快取測試與無真實網路的測試 harness |
 
-## 待辦：查核結果快取
+## 查核結果快取
 
-目前 `master` 尚未實作查核結果快取。未來實作時應與原 `fact-check-api` 行為對齊，並維持以下原則：
+目前已透過 Cache API 實作 Worker 內部快取；快取行為須與原 `fact-check-api` 對齊，並維持以下原則：
 
 - Worker 內部快取與瀏覽器快取分開，對外仍回 `Cache-Control: no-store`。
 - 快取鍵應涵蓋正規化輸入、模型、prompt、限制與契約版本，且不得暴露輸入原文或 credential。
 - 只能快取完整且無 warning 的結果；快取內容必須在讀取時重新驗證。
 - 快取失敗或快取內容損壞時必須回退到完整查核流程，不可使請求失敗。
 - 未受模型、prompt 或限制自動涵蓋的邏輯或契約變更，必須遞增快取版本。
-
-不得因為本節存在就自行實作快取；只有在使用者明確要求時才執行。
+- 快取內容不得保存輸入原文、URL、request ID 或 credential；命中時必須重新套用本次正規化輸入與 request ID。
+- 對快取行為、`meta.cache` 或 `X-Fact-Check-Cache` 的變更，視為對外契約變更，必須同步更新型別、文件與測試。
 
 ## 不可跨越的底線
 
@@ -109,7 +115,7 @@ synthesis                  Workers AI
 
 - 與使用者溝通、文件、註解及錯誤訊息使用繁體中文。
 - 程式碼識別字、型別、檔名與 API 欄位使用英文，並沿用現有命名風格。
-- 常數與上限集中在 `src/config.ts`，不在 service 中新增無命名的 magic number。
+- 新增或調整的行為常數與上限集中在 `src/config.ts`，不在 service 中新增無命名的 magic number。
 - 保留與當次任務無關的使用者變更，不進行未被要求的大規模重構、dependency upgrade 或 migration。
 - 新測試放在 `tests/*.test.ts`，使用 Node 內建 `node:test` 與 `node:assert/strict`。共用假資料放在 `tests/helpers.ts`。
 - 單元測試不呼叫真實網路、OpenRouter、Cofacts 或 Workers AI；透過注入的 `fetcher` 與假 `AI` binding 測試。
