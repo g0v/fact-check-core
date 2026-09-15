@@ -8,17 +8,24 @@ import { selectRelevant } from "./services/relevance";
 import { synthesize } from "./services/synthesis";
 import type { Candidate, Evidence } from "./services/types";
 
-function log(event: Record<string, unknown>) {
-  // 僅呼叫端建立的結構化欄位會進入 log，不記錄 claim、URL、模型輸出或 credential。
-  console.info(JSON.stringify(event));
-}
+export type Logger = (event: Record<string, unknown>) => void;
+
+export type FactCheckOptions = {
+  requestId?: string;
+  fetcher?: Fetcher;
+  log?: Logger;
+};
 
 export async function factCheck(
   input: FactCheckInput,
   env: Env,
-  fetcher: Fetcher = fetch,
+  options: FactCheckOptions | Fetcher = {},
 ): Promise<FactCheckResult> {
-  const requestId = crypto.randomUUID();
+  // 向下相容既有第三參數直接傳 fetcher 的呼叫方式。
+  const normalizedOptions = typeof options === "function" ? { fetcher: options } : options;
+  const requestId = normalizedOptions.requestId ?? crypto.randomUUID();
+  const fetcher = normalizedOptions.fetcher ?? fetch;
+  const log: Logger = normalizedOptions.log ?? ((event) => console.info(JSON.stringify(event)));
   const warnings: Warning[] = [];
   const meta: FactCheckResult["meta"] = {
     request_id: requestId,

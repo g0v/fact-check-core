@@ -1,20 +1,11 @@
 import { LIMITS, MODELS } from "../config";
-import type { Env, FactCheckInput, Moderation, Verdict } from "../contracts";
+import { verdicts, type Env, type FactCheckInput, type Moderation } from "../contracts";
 import { upstreamUnavailable } from "../errors";
 import { withTimeout } from "../http";
 import { synthesisPrompt } from "../prompts/synthesis";
 import { parseJsonCompletion } from "./model-output";
 import type { Evidence } from "./types";
 import { textSchema, v } from "../validation";
-
-const verdicts: Verdict[] = [
-  "supported",
-  "mostly_supported",
-  "mixed",
-  "mostly_refuted",
-  "refuted",
-  "insufficient_evidence",
-];
 
 const synthesisSchema = v.object({
   factuality: v.pipe(v.number(), v.finite(), v.minValue(0), v.maxValue(1)),
@@ -25,6 +16,14 @@ const synthesisSchema = v.object({
 
 function hasUsableEvidence(evidence: Evidence[]) {
   return evidence.some((item) => item.source !== "provided-url" || item.reliability === "allowlisted-institution");
+}
+
+export function parseSynthesis(value: unknown, hasEvidence: boolean) {
+  const result = v.parse(synthesisSchema, value);
+  return {
+    ...result,
+    confidence: hasEvidence ? result.confidence : Math.min(result.confidence, 0.5),
+  };
 }
 
 export async function synthesize(
@@ -61,10 +60,10 @@ export async function synthesize(
         }),
       LIMITS.modelTimeoutMs,
     );
-    const value = v.parse(synthesisSchema, parseJsonCompletion(output));
+    const value = parseSynthesis(parseJsonCompletion(output), hasEvidence);
     return {
       factuality: value.factuality,
-      confidence: hasEvidence ? value.confidence : Math.min(value.confidence, 0.5),
+      confidence: value.confidence,
       verdict: value.verdict,
       feedback: value.feedback,
       hasEvidence,

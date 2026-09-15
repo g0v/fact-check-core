@@ -13,7 +13,7 @@ const moderationSchema = v.object({
   reason: v.optional(v.pipe(v.string(), v.trim(), v.transform((value) => value.slice(0, 2_000)))),
 });
 
-function parseModeration(value: unknown): Moderation {
+export function parseModeration(value: unknown): Moderation {
   const result = v.parse(moderationSchema, value);
   const categories = stringArray(result.categories, 10, 100);
   const reason = result.reason;

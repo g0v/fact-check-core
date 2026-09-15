@@ -8,6 +8,15 @@ export type Verdict =
   | "refuted"
   | "insufficient_evidence";
 
+export const verdicts = [
+  "supported",
+  "mostly_supported",
+  "mixed",
+  "mostly_refuted",
+  "refuted",
+  "insufficient_evidence",
+] as const satisfies readonly Verdict[];
+
 export type Moderation = {
   decision: "allow" | "review" | "block" | "skipped";
   categories: string[];
@@ -49,6 +58,11 @@ export type FactCheckResult = FactCheckInput & {
     url_context_allowlisted: boolean;
     no_relevant_evidence: boolean;
     warnings: Warning[];
+    cache?: {
+      status: "hit" | "miss" | "bypass";
+      cached_at?: string;
+      expires_at?: string;
+    };
   };
 };
 
