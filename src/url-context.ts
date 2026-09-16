@@ -31,7 +31,8 @@ declare const HTMLRewriter: { new (): HtmlRewriter };
 function allowlisted(url: URL): boolean {
   const host = url.hostname.toLowerCase();
   return institutionDomains.some((domain) => host === domain || host.endsWith(`.${domain}`)) ||
-    (url.protocol === "https:" && host === "tfc-taiwan.org.tw");
+    (url.protocol === "https:" && host === "tfc-taiwan.org.tw") || 
+    (url.protocol === "https:" && host === "www.mygopen.com");
 }
 
 async function assertPublicDns(url: URL, fetcher: Fetcher, signal: AbortSignal) {
