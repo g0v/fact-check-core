@@ -77,7 +77,9 @@ export async function factCheck(
   meta.cofacts_candidates = candidates.length;
   let selected: Candidate[];
   try {
-    selected = await selectRelevant(input.text, candidates, env);
+    const relevance = await selectRelevant(input.text, candidates, env);
+    selected = relevance.selected;
+    if (relevance.hadFailures) warnings.push({ stage: "relevance", code: "UPSTREAM_UNAVAILABLE" });
   } catch {
     // 相關性服務只負責排除候選；故障時保留全部候選，避免漏掉證據。
     selected = candidates;

@@ -14,16 +14,19 @@ const relevanceSchema = v.object({
   })),
 });
 
-export async function selectRelevant(claim: string, candidates: Candidate[], env: Env): Promise<Candidate[]> {
-  if (!candidates.length) return [];
-  if (!env.AI) throw new Error("未設定 Workers AI");
+export type RelevanceSelection = {
+  selected: Candidate[];
+  hadFailures: boolean;
+};
+
+async function selectRelevantBatch(claim: string, candidates: Candidate[], ai: NonNullable<Env["AI"]>) {
   const modelCandidates = candidates.map((item) => ({
     articleId: item.articleId,
     text: item.text.slice(0, LIMITS.candidateText),
   }));
   const output = await withTimeout(
     () =>
-      env.AI!.run(MODELS.relevance, {
+      ai.run(MODELS.relevance, {
         messages: [
           { role: "system", content: relevancePrompt },
           { role: "user", content: JSON.stringify({ claim, candidates: modelCandidates }) },
@@ -50,5 +53,38 @@ export async function selectRelevant(claim: string, candidates: Candidate[], env
       : [];
   });
   if (seen.size !== candidates.length) throw new Error("初篩遺漏文章");
-  return selected.sort((a, b) => b.relevanceScore! - a.relevanceScore!).slice(0, LIMITS.relevant);
+  return selected;
+}
+
+export async function selectRelevant(
+  claim: string,
+  candidates: Candidate[],
+  env: Env,
+): Promise<RelevanceSelection> {
+  if (!candidates.length) return { selected: [], hadFailures: false };
+  if (!env.AI) throw new Error("未設定 Workers AI");
+  const ai = env.AI;
+
+  const batches: Candidate[][] = [];
+  for (let index = 0; index < candidates.length; index += LIMITS.relevanceBatchSize) {
+    batches.push(candidates.slice(index, index + LIMITS.relevanceBatchSize));
+  }
+  const results = await Promise.allSettled(
+    batches.map((batch) => selectRelevantBatch(claim, batch, ai)),
+  );
+  const successful: Candidate[] = [];
+  const failed: Candidate[] = [];
+  results.forEach((result, index) => {
+    if (result.status === "fulfilled") successful.push(...result.value);
+    else failed.push(...batches[index]);
+  });
+
+  return {
+    // 成功批次維持全域選取上限；失敗批次全部放行，避免漏掉可能的證據。
+    selected: [
+      ...successful.sort((a, b) => b.relevanceScore! - a.relevanceScore!).slice(0, LIMITS.relevant),
+      ...failed,
+    ],
+    hadFailures: failed.length > 0,
+  };
 }

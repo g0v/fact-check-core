@@ -21,6 +21,7 @@ export const LIMITS = {
   urlText: 12_000,
   candidates: 15,
   candidateText: 3_000,
+  relevanceBatchSize: 5,
   relevant: 5,
   relevanceThreshold: 0.65,
   relevanceMaxTokens: 16_384,
