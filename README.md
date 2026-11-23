@@ -85,3 +85,7 @@ vp run deploy
 ```
 
 部署前建議再次執行 `vp run typecheck` 與 `vp run test`。部署需要具備對應 Cloudflare 帳號與 Worker 權限，且會更新 `fact-check-core` 的線上版本。
+
+## 授權
+
+本專案採用 [MIT 授權](LICENSE)，著作權人為 Terry Lin 與 Bestian Tang。
